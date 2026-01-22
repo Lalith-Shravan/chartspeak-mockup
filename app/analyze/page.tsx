@@ -1,7 +1,6 @@
 "use client"
 
 import React from "react"
-
 import { useState, useRef, useCallback, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { Header } from "@/components/header"
@@ -20,7 +19,6 @@ import {
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
-// Mock chart data points for demonstration
 const mockChartData = [
   { x: 0, y: 25, label: "January" },
   { x: 1, y: 42, label: "February" },
@@ -37,107 +35,98 @@ const mockChartData = [
 ]
 
 export default function AnalyzePage() {
-  const [isPlaying, setIsPlaying] = useState(false)
-  const [currentIndex, setCurrentIndex] = useState(0)
-  const [isMuted, setIsMuted] = useState(false)
-  const [volume, setVolume] = useState(80)
-  const [hoveredPoint, setHoveredPoint] = useState<number | null>(null)
+  const [playing, setPlaying] = useState(false)
+  const [currentIdx, setCurrentIdx] = useState(0)
+  const [muted, setMuted] = useState(false)
+  const [volumeLevel, setVolumeLevel] = useState(80)
+  const [hoveredIdx, setHoveredIdx] = useState<number | null>(null)
   const router = useRouter()
-  const announceRef = useRef<HTMLDivElement>(null)
-  const audioContextRef = useRef<AudioContext | null>(null)
-  const oscillatorRef = useRef<OscillatorNode | null>(null)
-  const gainNodeRef = useRef<GainNode | null>(null)
+  const ariaAnnounceRef = useRef<HTMLDivElement>(null)
+  const audioCtxRef = useRef<AudioContext | null>(null)
+  const oscRef = useRef<OscillatorNode | null>(null)
+  const gainRef = useRef<GainNode | null>(null)
   const playIntervalRef = useRef<NodeJS.Timeout | null>(null)
 
   const announce = (message: string) => {
-    if (announceRef.current) {
-      announceRef.current.textContent = message
+    if (ariaAnnounceRef.current) {
+      ariaAnnounceRef.current.textContent = message
     }
   }
 
-  // Initialize audio context
   useEffect(() => {
-    audioContextRef.current = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)()
-    gainNodeRef.current = audioContextRef.current.createGain()
-    gainNodeRef.current.connect(audioContextRef.current.destination)
-    gainNodeRef.current.gain.value = volume / 100
+    audioCtxRef.current = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)()
+    gainRef.current = audioCtxRef.current.createGain()
+    gainRef.current.connect(audioCtxRef.current.destination)
+    gainRef.current.gain.value = volumeLevel / 100
 
     return () => {
-      if (oscillatorRef.current) {
-        oscillatorRef.current.stop()
+      if (oscRef.current) {
+        oscRef.current.stop()
       }
-      if (audioContextRef.current) {
-        audioContextRef.current.close()
+      if (audioCtxRef.current) {
+        audioCtxRef.current.close()
       }
     }
   }, [])
 
-  // Update volume
   useEffect(() => {
-    if (gainNodeRef.current) {
-      gainNodeRef.current.gain.value = isMuted ? 0 : volume / 100
+    if (gainRef.current) {
+      gainRef.current.gain.value = muted ? 0 : volumeLevel / 100
     }
-  }, [volume, isMuted])
+  }, [volumeLevel, muted])
 
-  // Convert data value to frequency (200Hz - 800Hz range)
   const valueToFrequency = (value: number) => {
     const minFreq = 200
     const maxFreq = 800
     return minFreq + (value / 100) * (maxFreq - minFreq)
   }
 
-  // Play tone for a data point
   const playTone = useCallback((dataPoint: typeof mockChartData[0]) => {
-    if (!audioContextRef.current || !gainNodeRef.current) return
+    if (!audioCtxRef.current || !gainRef.current) return
 
-    // Stop previous oscillator
-    if (oscillatorRef.current) {
-      oscillatorRef.current.stop()
+    if (oscRef.current) {
+      oscRef.current.stop()
     }
 
-    // Create new oscillator
-    oscillatorRef.current = audioContextRef.current.createOscillator()
-    oscillatorRef.current.type = "sine"
-    oscillatorRef.current.frequency.value = valueToFrequency(dataPoint.y)
-    oscillatorRef.current.connect(gainNodeRef.current)
-    oscillatorRef.current.start()
-    oscillatorRef.current.stop(audioContextRef.current.currentTime + 0.3)
+    oscRef.current = audioCtxRef.current.createOscillator()
+    oscRef.current.type = "sine"
+    oscRef.current.frequency.value = valueToFrequency(dataPoint.y)
+    oscRef.current.connect(gainRef.current)
+    oscRef.current.start()
+    oscRef.current.stop(audioCtxRef.current.currentTime + 0.3)
 
     announce(`${dataPoint.label}: ${dataPoint.y} percent. Frequency: ${Math.round(valueToFrequency(dataPoint.y))} hertz.`)
   }, [])
 
-  // Play/pause auto-play
   const togglePlay = () => {
-    if (isPlaying) {
+    if (playing) {
       if (playIntervalRef.current) {
         clearInterval(playIntervalRef.current)
       }
-      setIsPlaying(false)
+      setPlaying(false)
       announce("Playback paused")
     } else {
-      setIsPlaying(true)
+      setPlaying(true)
       announce("Playing chart audio. Each data point will play in sequence.")
       playIntervalRef.current = setInterval(() => {
-        setCurrentIndex((prev) => {
-          const next = (prev + 1) % mockChartData.length
-          playTone(mockChartData[next])
-          return next
+        setCurrentIdx((prev) => {
+          const nextIdx = (prev + 1) % mockChartData.length
+          playTone(mockChartData[nextIdx])
+          return nextIdx
         })
       }, 800)
     }
   }
 
-  // Reset playback
   const resetPlayback = () => {
     if (playIntervalRef.current) {
       clearInterval(playIntervalRef.current)
     }
-    setIsPlaying(false)
-    setCurrentIndex(0)
+    setPlaying(false)
+    setCurrentIdx(0)
     announce("Playback reset to beginning")
   }
 
-  // Clean up interval on unmount
   useEffect(() => {
     return () => {
       if (playIntervalRef.current) {
@@ -146,22 +135,20 @@ export default function AnalyzePage() {
     }
   }, [])
 
-  // Handle interactive touch/click on chart
   const handleChartInteraction = (index: number) => {
-    setCurrentIndex(index)
+    setCurrentIdx(index)
     playTone(mockChartData[index])
   }
 
-  // Keyboard navigation for chart
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "ArrowRight") {
-      const next = Math.min(currentIndex + 1, mockChartData.length - 1)
-      setCurrentIndex(next)
-      playTone(mockChartData[next])
+      const nextIdx = Math.min(currentIdx + 1, mockChartData.length - 1)
+      setCurrentIdx(nextIdx)
+      playTone(mockChartData[nextIdx])
     } else if (e.key === "ArrowLeft") {
-      const prev = Math.max(currentIndex - 1, 0)
-      setCurrentIndex(prev)
-      playTone(mockChartData[prev])
+      const prevIdx = Math.max(currentIdx - 1, 0)
+      setCurrentIdx(prevIdx)
+      playTone(mockChartData[prevIdx])
     } else if (e.key === " ") {
       e.preventDefault()
       togglePlay()
@@ -172,9 +159,8 @@ export default function AnalyzePage() {
     <div className="min-h-screen bg-background">
       <Header />
 
-      {/* Screen reader announcements */}
       <div
-        ref={announceRef}
+        ref={ariaAnnounceRef}
         className="sr-only"
         role="status"
         aria-live="polite"
@@ -192,7 +178,6 @@ export default function AnalyzePage() {
           </p>
         </div>
 
-        {/* Instructions card */}
         <Card className="mb-6 border-primary/50 bg-primary/5">
           <CardContent className="flex items-start gap-4 pt-6">
             <Info className="h-6 w-6 shrink-0 text-primary" aria-hidden="true" />
@@ -207,7 +192,6 @@ export default function AnalyzePage() {
           </CardContent>
         </Card>
 
-        {/* Interactive Chart */}
         <Card className="border-2">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -229,10 +213,9 @@ export default function AnalyzePage() {
             >
               <p id="chart-description" className="sr-only">
                 A bar chart showing monthly performance from January to December.
-                Current selection: {mockChartData[currentIndex].label} at {mockChartData[currentIndex].y} percent.
+                Current selection: {mockChartData[currentIdx].label} at {mockChartData[currentIdx].y} percent.
               </p>
 
-              {/* Y-axis labels */}
               <div className="absolute left-0 top-4 bottom-12 flex flex-col justify-between text-xs text-muted-foreground" aria-hidden="true">
                 <span>100%</span>
                 <span>75%</span>
@@ -241,11 +224,10 @@ export default function AnalyzePage() {
                 <span>0%</span>
               </div>
 
-              {/* Chart bars */}
               <div className="ml-10 flex h-full items-end gap-1 sm:gap-2 pb-8">
                 {mockChartData.map((point, index) => {
-                  const isActive = currentIndex === index
-                  const isHovered = hoveredPoint === index
+                  const isActive = currentIdx === index
+                  const isHovered = hoveredIdx === index
                   return (
                     <button
                       key={point.x}
@@ -260,8 +242,8 @@ export default function AnalyzePage() {
                       )}
                       style={{ height: `${point.y}%` }}
                       onClick={() => handleChartInteraction(index)}
-                      onMouseEnter={() => setHoveredPoint(index)}
-                      onMouseLeave={() => setHoveredPoint(null)}
+                      onMouseEnter={() => setHoveredIdx(index)}
+                      onMouseLeave={() => setHoveredIdx(null)}
                       onFocus={() => handleChartInteraction(index)}
                       aria-label={`${point.label}: ${point.y} percent`}
                       aria-pressed={isActive}
@@ -279,7 +261,6 @@ export default function AnalyzePage() {
                 })}
               </div>
 
-              {/* X-axis labels */}
               <div className="absolute bottom-0 left-10 right-0 flex justify-between text-xs text-muted-foreground" aria-hidden="true">
                 {mockChartData.map((point) => (
                   <span key={point.label} className="flex-1 text-center truncate">
@@ -289,20 +270,18 @@ export default function AnalyzePage() {
               </div>
             </div>
 
-            {/* Current value display */}
             <div className="mt-4 rounded-lg bg-muted p-4 text-center" role="region" aria-label="Current data point">
               <p className="text-sm text-muted-foreground">Current Selection</p>
               <p className="text-2xl font-bold text-foreground">
-                {mockChartData[currentIndex].label}: {mockChartData[currentIndex].y}%
+                {mockChartData[currentIdx].label}: {mockChartData[currentIdx].y}%
               </p>
               <p className="text-sm text-primary">
-                Frequency: {Math.round(valueToFrequency(mockChartData[currentIndex].y))} Hz
+                Frequency: {Math.round(valueToFrequency(mockChartData[currentIdx].y))} Hz
               </p>
             </div>
           </CardContent>
         </Card>
 
-        {/* Audio Controls */}
         <Card className="mt-6">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -312,7 +291,6 @@ export default function AnalyzePage() {
           </CardHeader>
           <CardContent>
             <div className="flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
-              {/* Playback controls */}
               <div className="flex items-center justify-center gap-4">
                 <Button
                   variant="outline"
@@ -327,10 +305,10 @@ export default function AnalyzePage() {
                   size="lg"
                   className="h-14 w-14 rounded-full"
                   onClick={togglePlay}
-                  aria-label={isPlaying ? "Pause playback" : "Play chart audio"}
-                  aria-pressed={isPlaying}
+                  aria-label={playing ? "Pause playback" : "Play chart audio"}
+                  aria-pressed={playing}
                 >
-                  {isPlaying ? (
+                  {playing ? (
                     <Pause className="h-6 w-6" />
                   ) : (
                     <Play className="h-6 w-6 ml-1" />
@@ -340,11 +318,11 @@ export default function AnalyzePage() {
                   variant="outline"
                   size="icon"
                   className="h-12 w-12 bg-transparent"
-                  onClick={() => setIsMuted(!isMuted)}
-                  aria-label={isMuted ? "Unmute" : "Mute"}
-                  aria-pressed={isMuted}
+                  onClick={() => setMuted(!muted)}
+                  aria-label={muted ? "Unmute" : "Mute"}
+                  aria-pressed={muted}
                 >
-                  {isMuted ? (
+                  {muted ? (
                     <VolumeX className="h-5 w-5" />
                   ) : (
                     <Volume2 className="h-5 w-5" />
@@ -352,27 +330,25 @@ export default function AnalyzePage() {
                 </Button>
               </div>
 
-              {/* Volume slider */}
               <div className="flex items-center gap-4 min-w-[200px]">
                 <label htmlFor="volume-slider" className="text-sm font-medium text-foreground whitespace-nowrap">
                   Volume
                 </label>
                 <Slider
                   id="volume-slider"
-                  value={[volume]}
-                  onValueChange={(value) => setVolume(value[0])}
+                  value={[volumeLevel]}
+                  onValueChange={(value) => setVolumeLevel(value[0])}
                   max={100}
                   step={5}
                   className="flex-1"
                   aria-label="Volume control"
                 />
-                <span className="text-sm text-muted-foreground w-10 text-right">{volume}%</span>
+                <span className="text-sm text-muted-foreground w-10 text-right">{volumeLevel}%</span>
               </div>
             </div>
           </CardContent>
         </Card>
 
-        {/* Navigation */}
         <div className="mt-8 flex justify-center">
           <Button
             size="lg"

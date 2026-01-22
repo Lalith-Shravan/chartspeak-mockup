@@ -1,7 +1,6 @@
 "use client"
 
 import React from "react"
-
 import { useState, useRef, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { Header } from "@/components/header"
@@ -28,171 +27,159 @@ interface Message {
 }
 
 export default function InsightsPage() {
-  const [messages, setMessages] = useState<Message[]>([])
-  const [isLoadingInsights, setIsLoadingInsights] = useState(true)
-  const [input, setInput] = useState("")
-  const [isPlaying, setIsPlaying] = useState(false)
-  const [isMuted, setIsMuted] = useState(false)
-  const [currentSpeechIndex, setCurrentSpeechIndex] = useState(0)
-  const [isSpeaking, setIsSpeaking] = useState(false)
-  const [chartImage, setChartImage] = useState<string | null>(null)
+  const [chatMessages, setChatMessages] = useState<Message[]>([])
+  const [loadingInsights, setLoadingInsights] = useState(true)
+  const [userInput, setUserInput] = useState("")
+  const [audioPlaying, setAudioPlaying] = useState(false)
+  const [audioMuted, setAudioMuted] = useState(false)
+  const [speechIdx, setSpeechIdx] = useState(0)
+  const [speaking, setSpeaking] = useState(false)
+  const [chartImg, setChartImg] = useState<string | null>(null)
   const router = useRouter()
-  const announceRef = useRef<HTMLDivElement>(null)
-  const messagesEndRef = useRef<HTMLDivElement>(null)
-  const speechSynthRef = useRef<SpeechSynthesisUtterance | null>(null)
-  const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const ariaAnnounceRef = useRef<HTMLDivElement>(null)
+  const msgEndRef = useRef<HTMLDivElement>(null)
+  const speechRef = useRef<SpeechSynthesisUtterance | null>(null)
+  const inputRef = useRef<HTMLTextAreaElement>(null)
 
   const announce = (message: string) => {
-    if (announceRef.current) {
-      announceRef.current.textContent = message
+    if (ariaAnnounceRef.current) {
+      ariaAnnounceRef.current.textContent = message
     }
   }
 
-  // Load insights from sessionStorage on mount
   useEffect(() => {
     const storedInsights = sessionStorage.getItem("chartInsights")
     const storedImage = sessionStorage.getItem("chartImage")
     
     if (storedInsights) {
-      setMessages([{ role: "assistant", content: storedInsights }])
-      setIsLoadingInsights(false)
+      setChatMessages([{ role: "assistant", content: storedInsights }])
+      setLoadingInsights(false)
       announce("Chart insights loaded successfully")
     } else {
-      // Redirect back to upload if no insights available
       announce("No chart data found. Redirecting to upload page.")
       router.push("/")
     }
     
     if (storedImage) {
-      setChartImage(storedImage)
+      setChartImg(storedImage)
     }
   }, [router])
 
-  // Scroll to bottom when messages change
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
-  }, [messages])
+    msgEndRef.current?.scrollIntoView({ behavior: "smooth" })
+  }, [chatMessages])
 
-  // Text-to-speech functionality
   const speakMessage = (text: string) => {
     if ("speechSynthesis" in window) {
-      // Cancel any ongoing speech
       window.speechSynthesis.cancel()
 
-      // Clean markdown from text
-      const cleanText = text
+      const cleanedText = text
         .replace(/\*\*/g, "")
         .replace(/\*/g, "")
         .replace(/#{1,6}\s/g, "")
         .replace(/`/g, "")
 
-      const utterance = new SpeechSynthesisUtterance(cleanText)
+      const utterance = new SpeechSynthesisUtterance(cleanedText)
       utterance.rate = 0.9
       utterance.pitch = 1
-      utterance.volume = isMuted ? 0 : 1
+      utterance.volume = audioMuted ? 0 : 1
 
       utterance.onstart = () => {
-        setIsSpeaking(true)
+        setSpeaking(true)
         announce("Started reading insights")
       }
 
       utterance.onend = () => {
-        setIsSpeaking(false)
-        setIsPlaying(false)
+        setSpeaking(false)
+        setAudioPlaying(false)
         announce("Finished reading insights")
       }
 
       utterance.onerror = () => {
-        setIsSpeaking(false)
-        setIsPlaying(false)
+        setSpeaking(false)
+        setAudioPlaying(false)
       }
 
-      speechSynthRef.current = utterance
+      speechRef.current = utterance
       window.speechSynthesis.speak(utterance)
-      setIsPlaying(true)
+      setAudioPlaying(true)
     }
   }
 
   const toggleSpeech = () => {
-    if (isPlaying) {
+    if (audioPlaying) {
       window.speechSynthesis.pause()
-      setIsPlaying(false)
+      setAudioPlaying(false)
       announce("Speech paused")
-    } else if (isSpeaking) {
+    } else if (speaking) {
       window.speechSynthesis.resume()
-      setIsPlaying(true)
+      setAudioPlaying(true)
       announce("Speech resumed")
     } else {
-      // Start reading from the current message
-      const assistantMessages = messages.filter(m => m.role === "assistant")
-      if (assistantMessages.length > 0) {
-        speakMessage(assistantMessages[currentSpeechIndex]?.content || assistantMessages[0].content)
+      const assistantMsgs = chatMessages.filter(m => m.role === "assistant")
+      if (assistantMsgs.length > 0) {
+        speakMessage(assistantMsgs[speechIdx]?.content || assistantMsgs[0].content)
       }
     }
   }
 
   const stopSpeech = () => {
     window.speechSynthesis.cancel()
-    setIsPlaying(false)
-    setIsSpeaking(false)
-    setCurrentSpeechIndex(0)
+    setAudioPlaying(false)
+    setSpeaking(false)
+    setSpeechIdx(0)
     announce("Speech stopped and reset")
   }
 
   const toggleMute = () => {
-    setIsMuted(!isMuted)
-    if (speechSynthRef.current) {
-      speechSynthRef.current.volume = isMuted ? 1 : 0
+    setAudioMuted(!audioMuted)
+    if (speechRef.current) {
+      speechRef.current.volume = audioMuted ? 1 : 0
     }
-    announce(isMuted ? "Unmuted" : "Muted")
+    announce(audioMuted ? "Unmuted" : "Muted")
   }
 
-  // Handle user question submission with Gemini API
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!input.trim()) return
+    if (!userInput.trim()) return
 
-    const userMessage = input.trim()
-    setMessages(prev => [...prev, { role: "user", content: userMessage }])
-    setInput("")
+    const questionText = userInput.trim()
+    setChatMessages(prev => [...prev, { role: "user", content: questionText }])
+    setUserInput("")
     announce("Question submitted. Generating response...")
 
     try {
-      // Send follow-up question to API with context
-      const formData = new FormData()
+      const formPayload = new FormData()
       
-      // Convert base64 image back to blob if available
-      if (chartImage) {
-        const response = await fetch(chartImage)
-        const blob = await response.blob()
-        formData.append("image", blob)
+      if (chartImg) {
+        const resp = await fetch(chartImg)
+        const imageBlob = await resp.blob()
+        formPayload.append("image", imageBlob)
       }
       
-      // Include conversation history for context
-      formData.append("question", userMessage)
-      formData.append("history", JSON.stringify(messages))
+      formPayload.append("question", questionText)
+      formPayload.append("history", JSON.stringify(chatMessages))
 
-      const apiResponse = await fetch("/api/analyze-chart", {
+      const apiResp = await fetch("/api/analyze-chart", {
         method: "POST",
-        body: formData,
+        body: formPayload,
       })
 
-      if (!apiResponse.ok) {
+      if (!apiResp.ok) {
         throw new Error("Failed to get response")
       }
 
-      const data = await apiResponse.json()
-      setMessages(prev => [...prev, { role: "assistant", content: data.insights }])
+      const respData = await apiResp.json()
+      setChatMessages(prev => [...prev, { role: "assistant", content: respData.insights }])
       announce("Response received. New insight available.")
-    } catch (error) {
-      console.error("Error getting response:", error)
-      const errorMessage = "I apologize, but I'm having trouble generating a response right now. Please try again."
-      setMessages(prev => [...prev, { role: "assistant", content: errorMessage }])
+    } catch (err) {
+      console.error("Error getting response:", err)
+      const errMsg = "I apologize, but I'm having trouble generating a response right now. Please try again."
+      setChatMessages(prev => [...prev, { role: "assistant", content: errMsg }])
       announce("Error generating response. Please try again.")
     }
   }
 
-  // Keyboard shortcut for submitting
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault()
@@ -204,9 +191,8 @@ export default function InsightsPage() {
     <div className="min-h-screen bg-background">
       <Header />
 
-      {/* Screen reader announcements */}
       <div
-        ref={announceRef}
+        ref={ariaAnnounceRef}
         className="sr-only"
         role="status"
         aria-live="polite"
@@ -224,7 +210,6 @@ export default function InsightsPage() {
           </p>
         </div>
 
-        {/* Speech Controls */}
         <Card className="mb-6">
           <CardHeader className="pb-4">
             <CardTitle className="flex items-center gap-2">
@@ -250,10 +235,10 @@ export default function InsightsPage() {
                 size="lg"
                 className="h-14 w-14 rounded-full"
                 onClick={toggleSpeech}
-                aria-label={isPlaying ? "Pause speech" : "Play speech"}
-                aria-pressed={isPlaying}
+                aria-label={audioPlaying ? "Pause speech" : "Play speech"}
+                aria-pressed={audioPlaying}
               >
-                {isPlaying ? (
+                {audioPlaying ? (
                   <Pause className="h-6 w-6" />
                 ) : (
                   <Play className="h-6 w-6 ml-1" />
@@ -264,17 +249,17 @@ export default function InsightsPage() {
                 size="icon"
                 className="h-12 w-12 bg-transparent"
                 onClick={toggleMute}
-                aria-label={isMuted ? "Unmute" : "Mute"}
-                aria-pressed={isMuted}
+                aria-label={audioMuted ? "Unmute" : "Mute"}
+                aria-pressed={audioMuted}
               >
-                {isMuted ? (
+                {audioMuted ? (
                   <VolumeX className="h-5 w-5" />
                 ) : (
                   <Volume2 className="h-5 w-5" />
                 )}
               </Button>
             </div>
-            {isSpeaking && (
+            {speaking && (
               <p className="mt-4 text-center text-sm text-primary animate-pulse">
                 Reading insights aloud...
               </p>
@@ -282,7 +267,6 @@ export default function InsightsPage() {
           </CardContent>
         </Card>
 
-        {/* Chat Interface */}
         <Card className="border-2">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -294,14 +278,13 @@ export default function InsightsPage() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            {/* Messages */}
             <div 
               className="h-[400px] overflow-y-auto rounded-lg bg-muted/30 p-4 mb-4"
               role="log"
               aria-label="Chat messages"
               aria-live="polite"
             >
-              {isLoadingInsights ? (
+              {loadingInsights ? (
                 <div className="flex items-center justify-center h-full">
                   <div className="text-center">
                     <div className="mb-4 h-12 w-12 animate-spin rounded-full border-4 border-primary border-t-transparent mx-auto" aria-hidden="true" />
@@ -310,7 +293,7 @@ export default function InsightsPage() {
                 </div>
               ) : (
                 <>
-                  {messages.map((message, index) => (
+                  {chatMessages.map((message, index) => (
                 <div
                   key={index}
                   className={cn(
@@ -366,20 +349,19 @@ export default function InsightsPage() {
                   </div>
                 </div>
               ))}
-                  <div ref={messagesEndRef} />
+                  <div ref={msgEndRef} />
                 </>
               )}            </div>
-            {/* Input */}
             <form onSubmit={handleSubmit} className="flex gap-3">
               <div className="relative flex-1">
                 <label htmlFor="question-input" className="sr-only">
                   Ask a question about your chart data
                 </label>
                 <Textarea
-                  ref={textareaRef}
+                  ref={inputRef}
                   id="question-input"
-                  value={input}
-                  onChange={(e) => setInput(e.target.value)}
+                  value={userInput}
+                  onChange={(e) => setUserInput(e.target.value)}
                   onKeyDown={handleKeyDown}
                   placeholder="Ask a question about your chart data..."
                   className="min-h-[56px] resize-none pr-12"
@@ -394,7 +376,7 @@ export default function InsightsPage() {
                 type="submit" 
                 size="lg" 
                 className="h-14 w-14 shrink-0"
-                disabled={!input.trim()}
+                disabled={!userInput.trim()}
                 aria-label="Send question"
               >
                 <Send className="h-5 w-5" />
@@ -403,7 +385,6 @@ export default function InsightsPage() {
           </CardContent>
         </Card>
 
-        {/* Quick Questions */}
         <section className="mt-6" aria-labelledby="quick-questions-heading">
           <h3 id="quick-questions-heading" className="mb-4 text-lg font-semibold text-foreground flex items-center gap-2">
             <Sparkles className="h-5 w-5 text-primary" aria-hidden="true" />
@@ -422,8 +403,8 @@ export default function InsightsPage() {
                 size="sm"
                 className="text-sm bg-transparent"
                 onClick={() => {
-                  setInput(question)
-                  textareaRef.current?.focus()
+                  setUserInput(question)
+                  inputRef.current?.focus()
                 }}
                 aria-label={`Ask: ${question}`}
               >
@@ -433,7 +414,6 @@ export default function InsightsPage() {
           </div>
         </section>
 
-        {/* Navigation */}
         <div className="mt-8 flex justify-center gap-4">
           <Button
             variant="outline"

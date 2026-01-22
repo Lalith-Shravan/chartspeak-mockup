@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
 import { Volume2 } from "lucide-react"
 
-const navItems = [
+const navigationItems = [
   { href: "/", label: "Upload Chart", step: 1 },
   { href: "/analyze", label: "Audio Analysis", step: 2 },
   { href: "/insights", label: "AI Insights", step: 3 },
@@ -34,9 +34,9 @@ export function Header() {
 
           <nav aria-label="Main navigation" role="navigation">
             <ol className="flex items-center gap-2" role="list" aria-label="Application steps">
-              {navItems.map((item, index) => {
-                const isActive = pathname === item.href
-                const isPast = navItems.findIndex(n => n.href === pathname) > index
+              {navigationItems.map((item, index) => {
+                const isCurrentPage = pathname === item.href
+                const isCompleted = navigationItems.findIndex(n => n.href === pathname) > index
 
                 return (
                   <li key={item.href} className="flex items-center">
@@ -44,7 +44,7 @@ export function Header() {
                       <div 
                         className={cn(
                           "mx-2 h-0.5 w-4 sm:w-8",
-                          isPast ? "bg-primary" : "bg-border"
+                          isCompleted ? "bg-primary" : "bg-border"
                         )} 
                         aria-hidden="true" 
                       />
@@ -54,21 +54,21 @@ export function Header() {
                       className={cn(
                         "flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors min-h-[44px]",
                         "focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
-                        isActive
+                        isCurrentPage
                           ? "bg-primary text-primary-foreground"
-                          : isPast
+                          : isCompleted
                           ? "bg-secondary text-secondary-foreground hover:bg-secondary/80"
                           : "text-muted-foreground hover:bg-secondary hover:text-secondary-foreground"
                       )}
-                      aria-current={isActive ? "step" : undefined}
-                      aria-label={`Step ${item.step}: ${item.label}${isActive ? " (current)" : ""}`}
+                      aria-current={isCurrentPage ? "step" : undefined}
+                      aria-label={`Step ${item.step}: ${item.label}${isCurrentPage ? " (current)" : ""}`}
                     >
                       <span
                         className={cn(
                           "flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold",
-                          isActive
+                          isCurrentPage
                             ? "bg-primary-foreground text-primary"
-                            : isPast
+                            : isCompleted
                             ? "bg-primary text-primary-foreground"
                             : "bg-muted text-muted-foreground"
                         )}

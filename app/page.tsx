@@ -1,7 +1,6 @@
 "use client"
 
 import React from "react"
-
 import { useState, useCallback, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { Header } from "@/components/header"
@@ -11,29 +10,29 @@ import { Upload, FileImage, X, ArrowRight, BarChart3, LineChart, PieChart } from
 import { cn } from "@/lib/utils"
 
 export default function UploadPage() {
-  const [file, setFile] = useState<File | null>(null)
-  const [preview, setPreview] = useState<string | null>(null)
-  const [isDragging, setIsDragging] = useState(false)
-  const [isUploading, setIsUploading] = useState(false)
+  const [selectedFile, setSelectedFile] = useState<File | null>(null)
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null)
+  const [dragActive, setDragActive] = useState(false)
+  const [uploading, setUploading] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const router = useRouter()
-  const announceRef = useRef<HTMLDivElement>(null)
+  const ariaAnnounceRef = useRef<HTMLDivElement>(null)
 
   const announce = (message: string) => {
-    if (announceRef.current) {
-      announceRef.current.textContent = message
+    if (ariaAnnounceRef.current) {
+      ariaAnnounceRef.current.textContent = message
     }
   }
 
-  const handleFile = useCallback((selectedFile: File) => {
-    if (selectedFile && selectedFile.type.startsWith("image/")) {
-      setFile(selectedFile)
-      const reader = new FileReader()
-      reader.onload = (e) => {
-        setPreview(e.target?.result as string)
+  const handleFile = useCallback((file: File) => {
+    if (file && file.type.startsWith("image/")) {
+      setSelectedFile(file)
+      const fileReader = new FileReader()
+      fileReader.onload = (e) => {
+        setPreviewUrl(e.target?.result as string)
       }
-      reader.readAsDataURL(selectedFile)
-      announce(`File selected: ${selectedFile.name}. Press the Analyze Chart button to continue.`)
+      fileReader.readAsDataURL(file)
+      announce(`File selected: ${file.name}. Press the Analyze Chart button to continue.`)
     } else {
       announce("Invalid file type. Please select an image file.")
     }
@@ -42,7 +41,7 @@ export default function UploadPage() {
   const handleDrop = useCallback(
     (e: React.DragEvent) => {
       e.preventDefault()
-      setIsDragging(false)
+      setDragActive(false)
       const droppedFile = e.dataTransfer.files[0]
       if (droppedFile) {
         handleFile(droppedFile)
@@ -53,27 +52,27 @@ export default function UploadPage() {
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault()
-    setIsDragging(true)
+    setDragActive(true)
   }, [])
 
   const handleDragLeave = useCallback((e: React.DragEvent) => {
     e.preventDefault()
-    setIsDragging(false)
+    setDragActive(false)
   }, [])
 
   const handleFileSelect = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
-      const selectedFile = e.target.files?.[0]
-      if (selectedFile) {
-        handleFile(selectedFile)
+      const fileFromInput = e.target.files?.[0]
+      if (fileFromInput) {
+        handleFile(fileFromInput)
       }
     },
     [handleFile]
   )
 
   const removeFile = () => {
-    setFile(null)
-    setPreview(null)
+    setSelectedFile(null)
+    setPreviewUrl(null)
     if (fileInputRef.current) {
       fileInputRef.current.value = ""
     }
@@ -81,35 +80,34 @@ export default function UploadPage() {
   }
 
   const handleAnalyze = async () => {
-    if (file) {
-      setIsUploading(true)
+    if (selectedFile) {
+      setUploading(true)
       announce("Processing chart. Please wait.")
       
       try {
-        // Create form data and send to API
-        const formData = new FormData()
-        formData.append("image", file)
+        const formPayload = new FormData()
+        formPayload.append("image", selectedFile)
 
-        const response = await fetch("/api/analyze-chart", {
+        const apiResponse = await fetch("/api/analyze-chart", {
           method: "POST",
-          body: formData,
+          body: formPayload,
         })
 
-        const data = await response.json()
+        const responseData = await apiResponse.json()
 
-        if (!response.ok) {
-          console.error("API Error:", data)
-          throw new Error(data.error || data.details || "Failed to analyze chart")
+        if (!apiResponse.ok) {
+          console.error("API Error:", responseData)
+          throw new Error(responseData.error || responseData.details || "Failed to analyze chart")
         }
 
-        if (!data.insights) {
+        if (!responseData.insights) {
           throw new Error("No insights returned from API")
         }
         
-        // Store insights in sessionStorage to pass to insights page
-        sessionStorage.setItem("chartInsights", data.insights)
-        if (preview) {
-          sessionStorage.setItem("chartImage", preview)
+
+        sessionStorage.setItem("chartInsights", responseData.insights)
+        if (previewUrl) {
+          sessionStorage.setItem("chartImage", previewUrl)
         }
         
         announce("Analysis complete. Redirecting to insights.")
@@ -119,7 +117,7 @@ export default function UploadPage() {
         const errorMessage = error instanceof Error ? error.message : "Failed to analyze chart. Please try again."
         announce(errorMessage)
         alert(errorMessage) // Show alert for visibility
-        setIsUploading(false)
+        setUploading(false)
       }
     }
   }
@@ -128,9 +126,8 @@ export default function UploadPage() {
     <div className="min-h-screen bg-background">
       <Header />
       
-      {/* Screen reader announcements */}
       <div
-        ref={announceRef}
+        ref={ariaAnnounceRef}
         className="sr-only"
         role="status"
         aria-live="polite"
@@ -159,11 +156,11 @@ export default function UploadPage() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            {!file ? (
+            {!selectedFile ? (
               <div
                 className={cn(
                   "relative rounded-xl border-2 border-dashed p-8 text-center transition-colors min-h-[300px] flex flex-col items-center justify-center",
-                  isDragging
+                  dragActive
                     ? "border-primary bg-primary/5"
                     : "border-border hover:border-primary/50 hover:bg-muted/50"
                 )}
@@ -206,10 +203,10 @@ export default function UploadPage() {
             ) : (
               <div className="space-y-4">
                 <div className="relative overflow-hidden rounded-xl border border-border">
-                  {preview && (
+                  {previewUrl && (
                     <img
-                      src={preview}
-                      alt={`Preview of uploaded chart: ${file.name}`}
+                      src={previewUrl}
+                      alt={`Preview of uploaded chart: ${selectedFile.name}`}
                       className="mx-auto max-h-[400px] object-contain"
                     />
                   )}
@@ -218,7 +215,7 @@ export default function UploadPage() {
                     size="icon"
                     className="absolute right-2 top-2 min-h-[44px] min-w-[44px]"
                     onClick={removeFile}
-                    aria-label={`Remove file: ${file.name}`}
+                    aria-label={`Remove file: ${selectedFile.name}`}
                   >
                     <X className="h-5 w-5" />
                   </Button>
@@ -227,9 +224,9 @@ export default function UploadPage() {
                   <div className="flex items-center gap-3">
                     <FileImage className="h-5 w-5 text-primary" aria-hidden="true" />
                     <div>
-                      <p className="font-medium text-foreground">{file.name}</p>
+                      <p className="font-medium text-foreground">{selectedFile.name}</p>
                       <p className="text-sm text-muted-foreground">
-                        {(file.size / 1024 / 1024).toFixed(2)} MB
+                        {(selectedFile.size / 1024 / 1024).toFixed(2)} MB
                       </p>
                     </div>
                   </div>
@@ -242,16 +239,16 @@ export default function UploadPage() {
           </CardContent>
         </Card>
 
-        {file && (
+        {selectedFile && (
           <div className="mt-6 flex justify-center">
             <Button
               size="lg"
               onClick={handleAnalyze}
-              disabled={isUploading}
+              disabled={uploading}
               className="min-h-[56px] px-8 text-lg font-semibold"
               aria-describedby="analyze-description"
             >
-              {isUploading ? (
+              {uploading ? (
                 <>
                   <span className="mr-2 h-5 w-5 animate-spin rounded-full border-2 border-current border-t-transparent" aria-hidden="true" />
                   Processing...

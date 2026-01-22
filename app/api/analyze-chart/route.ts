@@ -4,18 +4,18 @@ import { NextRequest, NextResponse } from "next/server"
 export async function POST(request: NextRequest) {
   try {
     const formData = await request.formData()
-    const file = formData.get("image") as File
-    const question = formData.get("question") as string | null
-    const historyJson = formData.get("history") as string | null
+    const imageFile = formData.get("image") as File
+    const userQuestion = formData.get("question") as string | null
+    const conversationHistory = formData.get("history") as string | null
 
     console.log("API Request received:", { 
-      hasFile: !!file, 
-      fileType: file?.type,
-      hasQuestion: !!question,
-      hasHistory: !!historyJson 
+      hasFile: !!imageFile, 
+      fileType: imageFile?.type,
+      hasQuestion: !!userQuestion,
+      hasHistory: !!conversationHistory 
     })
 
-    if (!file) {
+    if (!imageFile) {
       console.error("No file provided in request")
       return NextResponse.json(
         { error: "No image file provided" },
@@ -23,9 +23,8 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Check if API key is configured
-    const apiKey = process.env.GEMINI_API_KEY
-    if (!apiKey) {
+    const geminiKey = process.env.GEMINI_API_KEY
+    if (!geminiKey) {
       console.error("Gemini API key not configured in environment variables")
       return NextResponse.json(
         { error: "Gemini API key not configured. Please add GEMINI_API_KEY to your .env.local file." },
@@ -34,39 +33,35 @@ export async function POST(request: NextRequest) {
     }
 
     console.log("Converting file to base64...")
-    // Convert file to base64
-    const bytes = await file.arrayBuffer()
-    const buffer = Buffer.from(bytes)
-    const base64Image = buffer.toString("base64")
-    console.log("File converted successfully, size:", buffer.length, "bytes")
+    const fileBytes = await imageFile.arrayBuffer()
+    const imgBuffer = Buffer.from(fileBytes)
+    const base64Img = imgBuffer.toString("base64")
+    console.log("File converted successfully, size:", imgBuffer.length, "bytes")
 
-    // Initialize Gemini
     console.log("Initializing Gemini AI...")
-    const genAI = new GoogleGenerativeAI(apiKey)
-    const model = genAI.getGenerativeModel({ model: "gemini-flash-latest" })
+    const genAI = new GoogleGenerativeAI(geminiKey)
+    const aiModel = genAI.getGenerativeModel({ model: "gemini-flash-latest" })
 
-    let prompt: string
+    let promptText: string
 
-    // If this is a follow-up question, use a different prompt
-    if (question && historyJson) {
-      const history = JSON.parse(historyJson)
-      const conversationContext = history
+    if (userQuestion && conversationHistory) {
+      const history = JSON.parse(conversationHistory)
+      const conversationCtx = history
         .map((msg: { role: string; content: string }) => 
           `${msg.role === "user" ? "User" : "Assistant"}: ${msg.content}`
         )
         .join("\n\n")
 
-      prompt = `You are an expert data analyst helping visually impaired users understand charts and graphs. 
+      promptText = `You are an expert data analyst helping visually impaired users understand charts and graphs. 
 
 Previous conversation:
-${conversationContext}
+${conversationCtx}
 
-User's new question: ${question}
+User's new question: ${userQuestion}
 
 Based on the chart image and the conversation history, provide a clear, concise answer to the user's question. Format your response in markdown for easy reading and text-to-speech compatibility. Be helpful and specific.`
     } else {
-      // Initial analysis prompt
-      prompt = `You are an expert data analyst helping visually impaired users understand charts and graphs. 
+      promptText = `You are an expert data analyst helping visually impaired users understand charts and graphs. 
 
 Analyze this chart image and provide a comprehensive, accessible description that includes:
 
@@ -86,23 +81,23 @@ Format your response in clear markdown with headers and bullet points for easy r
     }
 
     console.log("Sending request to Gemini AI...")
-    const result = await model.generateContent([
-      prompt,
+    const apiResult = await aiModel.generateContent([
+      promptText,
       {
         inlineData: {
-          mimeType: file.type,
-          data: base64Image,
+          mimeType: imageFile.type,
+          data: base64Img,
         },
       },
     ])
 
     console.log("Received response from Gemini AI")
-    const response = await result.response
-    const insights = response.text()
+    const aiResponse = await apiResult.response
+    const analysisText = aiResponse.text()
     
-    console.log("Analysis complete, insights length:", insights.length)
+    console.log("Analysis complete, insights length:", analysisText.length)
 
-    return NextResponse.json({ insights })
+    return NextResponse.json({ insights: analysisText })
   } catch (error) {
     console.error("Error analyzing chart:", error)
     console.error("Error details:", {
